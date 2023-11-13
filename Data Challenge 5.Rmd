@@ -1,0 +1,164 @@
+---
+title: "Data Challenge 5"
+author: "Amanda Carrico"
+date: "2023-11-13"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 2
+    number_sections: no
+    theme: cerulean
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+  word_document:
+    toc: no
+  pdf_document:
+    toc: no
+---
+
+```{r,echo=FALSE}
+knitr::opts_chunk$set(cache=TRUE, echo=TRUE, error=FALSE, message=FALSE, warning=FALSE, tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+```{r library}
+# load needed libraries
+library(tidyverse)
+library(knitr)
+```
+
+## Problem 1
+#### Use the gene expression data in Ch10Ex11.csv that is provided for you on Canvas. This is gene expression data that consists of 40 tissue samples with measurements on 1,000 genes. The first 20 samples are from healthy patients, while the second 20 are from a diseased group.
+
+### 1. Load the data – note that there is no header so you will need to read this in without one. Note that rows in this dataset represent genes and columns subjects. You will need to transpose the data using the function t() before you cluster (as we would like to cluster subjects).
+```{r 1genedata}
+# load data in
+Ch10Ex11 <- read_csv("C:/Users/Owner/Desktop/weill cornell docs/Fall 2023 courses/Data Science I/Ch10Ex11.csv", col_names = FALSE)
+# use for loops to get vector containing name of each observation, healthy or diseased with the column number
+tissue_sample <- {}
+for (i in 1:20){
+  tissue_sample <- c(tissue_sample, sprintf("Healthy %d", i))
+}
+for (i in 21:40){
+  tissue_sample <- c(tissue_sample, sprintf("Disease %d", i))
+}
+# use the vector generated as column names
+colnames(Ch10Ex11) <- tissue_sample
+# show data with new column names
+head(Ch10Ex11)
+# transpose data set since want observations as rows
+Ch10Ex11_t <- t(Ch10Ex11)
+```
+
+### 2. Scale the data.
+```{r 1scale}
+# scale
+Ch10Ex11_tscale <- scale(Ch10Ex11_t)
+```
+
+### 3. Using the code from the lecture notes and the kmeans function in R, produce the associated elbow plot (i.e., a plot of within-cluster sum of squares vs. cluster size). You can use 1 through 15 for your k values. Given your plot, what is the appropriate number of clusters for the data? Why?
+```{r 1elbow}
+# set seed for randomness
+set.seed(100)
+# use function given in lecture for kmeans
+wss <- function(k, data) {
+kmeans(data, k, nstart = 50)$tot.withinss
+}
+# set k values to 1 through 15
+k_values <- 1:15
+# use function, k values, and data for clustering
+wss_values <- map_dbl(k_values, wss, data = Ch10Ex11_tscale)
+# use data for elbow plot to see appropriate number of clusters
+wss_values <- tibble(wss = wss_values,
+k = k_values)
+ggplot(wss_values, aes(x = k, y = wss)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Elbow Plot for Gene Expression Data")
+```
+
+Since the kink in the plot is at about 2, we use 2 clusters for this data.
+
+### 4. Cluster the scaled data using the kmeans function in R. Try this with the number of clusters you concluded in Step 3 and 50 iterations.
+```{r 1cluster}
+# cluster using k means function for 2 groups and 50 iterations
+k_means_gene <- kmeans(Ch10Ex11_tscale,
+centers = 2,
+nstart = 50)
+```
+
+### 5. Summarize the results in a contingency table. A contingency table is a tabular representation of categorical data that typically shows the frequency of the combinations of the two variables (i.e., an m by n table). Here we would like to show a table of our clustering versus the true disease status of the subjects. Create a variable of the disease status for the 40 tissue samples. Use the clustering that you obtained in the previous step. Create a table of the two variables using table(). Comment on what you observe.
+```{r 1contingency_table}
+# transform clustered groups into data frame and add column containing whether observation was truly healthy or not
+cluster_data <- data.frame(k_means_gene$cluster)
+cluster_data$Real_Status <- substr(rownames(cluster_data),1,7)
+colnames(cluster_data) <- c("K-means Cluster", "True Disease Status")
+# use new data frame to create table
+table(cluster_data)
+```
+This clustering worked very well. All 20 of the true diseased population was placed in group 1 and all 20 of the truly healthy group was placed in group 2, with no observations being placed in 1 despite being diseased or in 2 despite being healthy.
+
+### 6. Don’t forget to set a seed number before running any function that introduces randomness!
+<br>
+
+## Problem 2
+#### Perform hierarchical clustering on the same scaled data set.
+### 3. Calculate the Euclidean distance between the observations.
+```{r euclidean_clus}
+# calculate euclidean distance using natural dist function
+gene_eu_dist <- dist(Ch10Ex11_tscale)
+```
+
+### 4. Perform hierarchical clustering on the data using the below linkages, and plot the dendograms for each linkage:
+### - complete linkage
+### - single linkage
+### - average linkage
+```{r hierachical_clus}
+# plot complete linkage using hclust, distance stored in gene_eu_dist, and plot function - use complete method
+eu_complete <- hclust(gene_eu_dist, method = 'complete')
+plot(eu_complete, main = "Gene Expression Complete Hierarchical Cluster Dendrogram \n Using Euclidean Distance", cex = .35)
+
+# plot average linkage using hclust, distance stored in gene_eu_dist, and plot function - use average method
+eu_average <- hclust(gene_eu_dist, method = 'average')
+plot(eu_average, main = "Gene Expression Average Hierarchical Cluster Dendrogram \n Using Euclidean Distance", cex = .35)
+
+# plot single linkage using hclust, distance stored in gene_eu_dist, and plot function - use single method
+eu_single <- hclust(gene_eu_dist, method = 'single')
+plot(eu_single, main = "Gene Expression Single Hierarchical Cluster Dendrogram \n Using Euclidean Distance", cex = .35)
+```
+
+### 5. Determine clusters for 2 groups from all three methods using cutree().
+```{r hierch2groups}
+# use cutree function to create 2 groups using each clustering method and store in variable
+eu_comp_2 <- cutree(eu_complete, 2)
+eu_avg_2 <- cutree(eu_average, 2)
+eu_sing_2 <- cutree(eu_single, 2)
+```
+
+### 6. Make three contingency tables for the results. Comment on what you observe.
+```{r 2contingencytable}
+# create contingency table for complete hierarchical clustering using euclidean distances 
+eucomp_data <- data.frame(eu_comp_2)
+eucomp_data$Real_Status <- substr(rownames(eucomp_data),1,7)
+colnames(eucomp_data) <- c("Complete Euclidean Hierarchical Cluster", "True Disease Status")
+table(eucomp_data)
+
+# create contingency table for average hierarchical clustering using euclidean distances 
+euavg_data <- data.frame(eu_avg_2)
+euavg_data$Real_Status <- substr(rownames(euavg_data),1,7)
+colnames(euavg_data) <- c("Average Euclidean Hierarchical Cluster", "True Disease Status")
+table(euavg_data)
+
+# create contingency table for single hierarchical clustering using euclidean distances 
+eusing_data <- data.frame(eu_sing_2)
+eusing_data$Real_Status <- substr(rownames(eusing_data),1,7)
+colnames(eusing_data) <- c("Single Euclidean Hierarchical Cluster", "True Disease Status")
+table(eusing_data)
+```
+All hierarchical methods for clustering are just as effective as the k-means clustering for this gene expression data set. Every healthy partipant was placed in one group and and all diseased partipants were placed in another group for all three methods.
+<br>
+
+## Problem 3
+#### Write a few sentences commenting on the results you obtained in Problems 1 and 2.
+In general, k-means should be more the more effective clustering algorithm for large datasets. However, in this gene expression data set that was used all methods led to similar results. Each observation was put into the same group with others of the same category, healthy or diseased. The only difference between the three hierarchical methods and the k-means was that the hierarchical methods placed diseased observations in group 2 while k-means placed them in group 1, though this does not truly change anything.
